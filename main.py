@@ -1,20 +1,32 @@
+import os
 from flask import Flask, request, render_template, flash, redirect, url_for
 import pandas as pd
 import numpy as np
 import pickle
 
+# Create app and basic config
+app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'change-me-in-production')
+
+# Base path for data/model files
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Helper to load CSV safely relative to project
+def _csv(path):
+    return pd.read_csv(os.path.join(BASE_DIR, path))
+
 # Load CSV data
-sym_des = pd.read_csv("symptoms.csv")
-precautions = pd.read_csv("precautions.csv")
-workout = pd.read_csv("workout.csv")
-description = pd.read_csv("description.csv")
-medications = pd.read_csv("medications.csv")
-diets = pd.read_csv("diets.csv")
+sym_des = _csv("symptoms.csv")
+precautions = _csv("precautions.csv")
+workout = _csv("workout.csv")
+description = _csv("description.csv")
+medications = _csv("medications.csv")
+diets = _csv("diets.csv")
 
 # Load the model
-svc = pickle.load(open('svc.pkl', 'rb'))
-
-app = Flask(__name__)
+svc_path = os.path.join(BASE_DIR, 'svc.pkl')
+with open(svc_path, 'rb') as _f:
+    svc = pickle.load(_f)
 
 # Helper function to get details based on disease
 def helper(dis):
@@ -102,5 +114,14 @@ def developer():
 def blog():
     return render_template('blog.html')
 
+
+@app.route('/health')
+def health():
+    # Simple health check for hosting platforms (Render, Heroku, etc.)
+    return 'ok', 200
+
 if __name__ == "__main__":
-    app.run(debug=True)
+    host = os.getenv('HOST', '0.0.0.0')
+    port = int(os.getenv('PORT', 5000))
+    debug = os.getenv('FLASK_DEBUG', '0') == '1'
+    app.run(host=host, port=port, debug=debug)
