@@ -92,4 +92,3 @@ The project now includes a modern Next.js frontend in the `frontend` directory.
 5. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
 The frontend communicates with the backend via API endpoints at `http://localhost:5000/api`.
-
