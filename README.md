@@ -69,3 +69,27 @@ Quick Render notes
 - Otherwise use the Build and Start commands from the Render steps above.
 
 If you'd like, I already added a minimal `Dockerfile` — tell me if you want me to also add a `render.yaml` or run a local smoke test now.
+
+## New Frontend (Next.js)
+
+The project now includes a modern Next.js frontend in the `frontend` directory.
+
+### Running the Frontend
+
+1. Ensure the Flask backend is running (see Local testing above).
+2. Open a new terminal and navigate to the `frontend` directory:
+   ```powershell
+   cd frontend
+   ```
+3. Install dependencies (if not already done):
+   ```powershell
+   npm install
+   ```
+4. Start the development server:
+   ```powershell
+   npm run dev
+   ```
+5. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+The frontend communicates with the backend via API endpoints at `http://localhost:5000/api`.
+
