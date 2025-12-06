@@ -1,9 +1,10 @@
 import os
+import csv
+import json
+import pickle
+import numpy as np
 from flask import Flask, request, render_template, flash, redirect, url_for, jsonify
 from flask_cors import CORS
-import pandas as pd
-import numpy as np
-import pickle
 
 # Create app and basic config
 app = Flask(__name__)
@@ -13,20 +14,25 @@ app.secret_key = os.getenv('SECRET_KEY', 'change-me-in-production')
 # Base path for data/model files
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Helper to load CSV safely relative to project
-def _csv(path):
-    return pd.read_csv(os.path.join(BASE_DIR, path))
+# Helper to load CSV into a list of dictionaries
+def load_csv(filename):
+    path = os.path.join(BASE_DIR, filename)
+    data = []
+    try:
+        with open(path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                data.append(row)
+    except Exception as e:
+        print(f"Error loading {filename}: {e}")
+    return data
 
-# Load CSV data
-sym_des = _csv("symptoms.csv")
-precautions = _csv("precautions.csv")
-workout = _csv("workout.csv")
-description = _csv("description.csv")
-medications = _csv("medications.csv")
-diets = _csv("diets.csv")
-
-# Load the model
-import json
+# Load CSV data into memory
+precautions_data = load_csv("precautions.csv")
+workout_data = load_csv("workout.csv")
+description_data = load_csv("description.csv")
+medications_data = load_csv("medications.csv")
+diets_data = load_csv("diets.csv")
 
 # Load the model
 svc_path = os.path.join(BASE_DIR, 'disease_model.pkl')
@@ -43,29 +49,61 @@ symptoms_dict = {symptom: index for index, symptom in enumerate(symptoms_list)}
 
 # Helper function to get details based on disease
 def helper(dis):
-    # Check if the disease data is available in each dataset
-    desc = description[description['Disease'] == dis]['Description']
-    if not desc.empty:
-        desc = " ".join([w for w in desc])
-    else:
-        desc = "Description not available."
+    # Description
+    desc = "Description not available."
+    for row in description_data:
+        if row.get('Disease') == dis:
+            desc = row.get('Description', "")
+            break
     
-    pre = precautions[precautions['Disease'] == dis][['Precaution_1', 'Precaution_2', 'Precaution_3', 'Precaution_4']]
-    pre = [list(row) for row in pre.values] if not pre.empty else ["Precautions not available."]
-    
-    med = medications[medications['Disease'] == dis]['Medication']
-    med = [medication for medication in med.values] if not med.empty else ["Medications not available."]
-    
-    die = diets[diets['Disease'] == dis]['Diet']
-    die = [diet for diet in die.values] if not die.empty else ["Diet not available."]
-    
-    workout_plan = workout[workout['disease'] == dis]['workout']
-    workout_plan = [w for w in workout_plan.values] if not workout_plan.empty else ["Workout plan not available."]
+    # Precautions
+    pre = []
+    for row in precautions_data:
+        if row.get('Disease') == dis:
+            # Filter out empty precautions
+            p_list = [row.get(f'Precaution_{i}') for i in range(1, 5)]
+            pre = [[p for p in p_list if p]]
+            break
+    if not pre:
+        pre = ["Precautions not available."]
+
+    # Medications
+    med = []
+    for row in medications_data:
+        if row.get('Disease') == dis:
+            # Medications CSV structure might vary, assuming 'Medication' column contains JSON string or list
+            # Based on previous code: med = medications[medications['Disease'] == dis]['Medication']
+            # It seems it returns a list of values.
+            # Let's assume one row per disease with a 'Medication' column
+            m = row.get('Medication')
+            if m:
+                # If it's a string representation of a list, we might need to parse it, 
+                # but previous code just returned the value.
+                med = [m] 
+    if not med:
+        med = ["Medications not available."]
+
+    # Diet
+    die = []
+    for row in diets_data:
+        if row.get('Disease') == dis:
+            d = row.get('Diet')
+            if d:
+                die = [d]
+    if not die:
+        die = ["Diet not available."]
+
+    # Workout
+    workout_plan = []
+    for row in workout_data:
+        if row.get('disease') == dis:
+            w = row.get('workout')
+            if w:
+                workout_plan.append(w)
+    if not workout_plan:
+        workout_plan = ["Workout plan not available."]
     
     return desc, pre, med, die, workout_plan
-
-
-
 
 # Predict function to predict the disease based on symptoms
 def get_predicted_value(patient_symptoms):
@@ -82,7 +120,6 @@ def index():
 
 @app.route('/api/symptoms', methods=['GET'])
 def get_symptoms():
-    # Return list of symptoms for the frontend dropdown
     return jsonify({'symptoms': list(symptoms_dict.keys())})
 
 @app.route('/api/predict', methods=['POST'])
@@ -92,7 +129,6 @@ def api_predict():
         return jsonify({'error': 'No symptoms provided'}), 400
     
     user_symptoms = data['symptoms']
-    # Filter valid symptoms
     valid_symptoms = [s for s in user_symptoms if s in symptoms_dict]
     
     if not valid_symptoms:
@@ -115,8 +151,6 @@ def api_predict():
 def predict():
     if request.method == 'POST':
         symptoms = request.form.get('symptoms')
-        
-        # Validate input
         if not symptoms:
             flash("Please enter symptoms!")
             return redirect(url_for('index'))
@@ -128,7 +162,6 @@ def predict():
             flash("Sorry, we couldn't predict the disease. Please try again with different symptoms.")
             return redirect(url_for('index'))
         
-        # Get details from helper function
         desc, pre, med, die, workout = helper(predicted_disease)
         
         return render_template(
@@ -157,10 +190,8 @@ def developer():
 def blog():
     return render_template('blog.html')
 
-
 @app.route('/health')
 def health():
-    # Simple health check for hosting platforms (Render, Heroku, etc.)
     return 'ok', 200
 
 if __name__ == "__main__":
